@@ -1,0 +1,410 @@
+# =============================================================================
+# Oasis — Docker Compose (Local Development)
+# All services are FREE and open-source. Total cost: $0
+# =============================================================================
+
+services:
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # APPLICATION SERVICES
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  gateway:
+    build:
+      context: ./services/gateway
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file: .env
+    depends_on:
+      - redis
+      - auth
+      - orchestrator
+    volumes:
+      - ./services/gateway/src:/app/src
+    networks:
+      - oasis-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  auth:
+    build:
+      context: ./services/auth
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    env_file: .env
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./services/auth/src:/app/src
+    networks:
+      - oasis-net
+    restart: unless-stopped
+
+  orchestrator:
+    build:
+      context: ./services/orchestrator
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8002"
+    env_file: .env
+    depends_on:
+      - redis
+      - rag-engine
+      - translation
+    volumes:
+      - ./services/orchestrator/src:/app/src
+    networks:
+      - oasis-net
+    restart: unless-stopped
+
+  rag-engine:
+    build:
+      context: ./services/rag-engine
+      dockerfile: Dockerfile
+    ports:
+      - "8003:8003"
+    env_file: .env
+    depends_on:
+      - qdrant
+    volumes:
+      - ./services/rag-engine/src:/app/src
+    networks:
+      - oasis-net
+    restart: unless-stopped
+
+  translation:
+    build:
+      context: ./services/translation
+      dockerfile: Dockerfile
+    ports:
+      - "8004:8004"
+    env_file: .env
+    depends_on:
+      - redis
+    volumes:
+      - ./services/translation/src:/app/src
+    networks:
+      - oasis-net
+    restart: unless-stopped
+
+  voice:
+    build:
+      context: ./services/voice
+      dockerfile: Dockerfile
+    ports:
+      - "8005:8005"
+    env_file: .env
+    depends_on:
+      - redis
+      - translation
+    volumes:
+      - ./services/voice/src:/app/src
+    networks:
+      - oasis-net
+    restart: unless-stopped
+
+  accessibility:
+    build:
+      context: ./services/accessibility-engine
+      dockerfile: Dockerfile
+    ports:
+      - "8006:8006"
+    env_file: .env
+    volumes:
+      - ./services/accessibility-engine/src:/app/src
+    networks:
+      - oasis-net
+    restart: unless-stopped
+
+  notification:
+    build:
+      context: ./services/notification
+      dockerfile: Dockerfile
+    ports:
+      - "8007:8007"
+    env_file: .env
+    depends_on:
+      - redis
+      - postgres
+    volumes:
+      - ./services/notification/src:/app/src
+    networks:
+      - oasis-net
+    restart: unless-stopped
+
+  ml-pipeline:
+    build:
+      context: ./services/ml-pipeline
+      dockerfile: Dockerfile
+    ports:
+      - "8008:8008"
+    env_file: .env
+    depends_on:
+      - minio
+    volumes:
+      - ./services/ml-pipeline:/app
+    networks:
+      - oasis-net
+    restart: unless-stopped
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # MCP SERVERS (Custom data integration layer)
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  weather-mcp:
+    build:
+      context: ./mcp-servers/weather-mcp
+      dockerfile: Dockerfile
+    ports:
+      - "8010:8010"
+    env_file: .env
+    depends_on:
+      - redis
+    networks:
+      - oasis-net
+    restart: unless-stopped
+
+  pollution-mcp:
+    build:
+      context: ./mcp-servers/pollution-mcp
+      dockerfile: Dockerfile
+    ports:
+      - "8011:8011"
+    env_file: .env
+    depends_on:
+      - redis
+    networks:
+      - oasis-net
+    restart: unless-stopped
+
+  disaster-mcp:
+    build:
+      context: ./mcp-servers/disaster-mcp
+      dockerfile: Dockerfile
+    ports:
+      - "8012:8012"
+    env_file: .env
+    depends_on:
+      - redis
+    networks:
+      - oasis-net
+    restart: unless-stopped
+
+  news-mcp:
+    build:
+      context: ./mcp-servers/news-mcp
+      dockerfile: Dockerfile
+    ports:
+      - "8013:8013"
+    env_file: .env
+    networks:
+      - oasis-net
+    restart: unless-stopped
+
+  health-mcp:
+    build:
+      context: ./mcp-servers/health-mcp
+      dockerfile: Dockerfile
+    ports:
+      - "8014:8014"
+    env_file: .env
+    networks:
+      - oasis-net
+    restart: unless-stopped
+
+  geo-mcp:
+    build:
+      context: ./mcp-servers/geo-mcp
+      dockerfile: Dockerfile
+    ports:
+      - "8015:8015"
+    env_file: .env
+    networks:
+      - oasis-net
+    restart: unless-stopped
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # DATA STORES (All free, open-source)
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-oasis}
+      POSTGRES_USER: ${POSTGRES_USER:-oasis_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-oasis_dev_password}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - oasis-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-oasis_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    networks:
+      - oasis-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    networks:
+      - oasis-net
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-oasis_minio_access}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-oasis_minio_secret}
+    volumes:
+      - minio-data:/data
+    networks:
+      - oasis-net
+    restart: unless-stopped
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # OBSERVABILITY (LGTM Stack — all free, open-source)
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    ports:
+      - "4317:4317"   # gRPC OTLP
+      - "4318:4318"   # HTTP OTLP
+      - "8888:8888"   # Collector metrics
+    volumes:
+      - ./observability/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
+    depends_on:
+      - tempo
+      - loki
+    networks:
+      - oasis-net
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_SECURITY_ADMIN_USER: admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+    networks:
+      - oasis-net
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    networks:
+      - oasis-net
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:latest
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki-data:/loki
+    networks:
+      - oasis-net
+    restart: unless-stopped
+
+  tempo:
+    image: grafana/tempo:latest
+    ports:
+      - "3200:3200"
+      - "4320:4317"   # OTLP gRPC for Tempo
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    volumes:
+      - ./observability/tempo.yaml:/etc/tempo/tempo.yaml
+      - tempo-data:/tmp/tempo
+    networks:
+      - oasis-net
+    restart: unless-stopped
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # FRONTEND
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3000"
+    env_file: .env
+    depends_on:
+      - gateway
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+    networks:
+      - oasis-net
+    restart: unless-stopped
+
+# ═══════════════════════════════════════════════════════════════════════════
+# PERSISTENT VOLUMES
+# ═══════════════════════════════════════════════════════════════════════════
+
+volumes:
+  postgres-data:
+  redis-data:
+  qdrant-data:
+  minio-data:
+  grafana-data:
+  prometheus-data:
+  loki-data:
+  tempo-data:
+
+# ═══════════════════════════════════════════════════════════════════════════
+# NETWORK
+# ═══════════════════════════════════════════════════════════════════════════
+
+networks:
+  oasis-net:
+    driver: bridge

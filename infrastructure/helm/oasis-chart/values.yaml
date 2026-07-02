@@ -1,0 +1,33 @@
+# Default values for Oasis Helm Chart
+
+global:
+  environment: development
+
+gateway:
+  replicaCount: 1
+  image:
+    repository: oasis-gateway
+    tag: latest
+    pullPolicy: Never # Use local Minikube images
+  service:
+    port: 8000
+
+orchestrator:
+  replicaCount: 1
+  image:
+    repository: oasis-orchestrator
+    tag: latest
+    pullPolicy: Never
+  service:
+    port: 8002
+
+frontend:
+  replicaCount: 1
+  image:
+    repository: oasis-frontend
+    tag: latest
+    pullPolicy: Never
+  service:
+    port: 3000
+
+# Add other services as needed...
